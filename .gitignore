@@ -1,3 +1,5 @@
 blockpacks
 system
 config.txt
+lib_nbt.py
+minescript_plus.py
