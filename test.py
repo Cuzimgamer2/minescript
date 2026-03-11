@@ -6,7 +6,7 @@ import sys
 open_bazaar = "/bz"
 
 
-print("starte111d")
+print("starte2222d")
 time.sleep(2)
 execute(f"/bz enchanted potato")
 print("finished")
