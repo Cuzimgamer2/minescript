@@ -1,16 +1,15 @@
 import time
 import random
-from minescript import execute, echo, container_get_items, screen_name
+from system.lib.minescript import execute, echo, container_get_items, screen_name
 from minescript_plus import Inventory, Screen, Gui
 from system.lib.minescript import *
 import sys
-from pynput.keyboard import Key, Controller
+from lib_sign import Sign
 
-keyboard = Controller()
 
 # ── CONFIG ─────────────────────────────────────────────────────
 
-CUSTOM_AMOUNT = "1k"
+CUSTOM_AMOUNT = "5k"
 
 # ── CONFIG ─────────────────────────────────────────────────────
 
@@ -48,12 +47,11 @@ def place_order(item_name: str):
     print("custom amount")
     
     rand_sleep(1.1, 1.8)
-    keyboard.type(CUSTOM_AMOUNT)
+    Sign.write(CUSTOM_AMOUNT, 0.05, 0.3, False, False)
+    while Sign.is_writing(): time.sleep(0.1)
+    time.sleep(1)
+    Sign.close_screen()
     print("custom enterd")
-    
-    rand_sleep(0.5, 1.0)
-    keyboard.press(Key.esc)
-    keyboard.release(Key.esc)
     
     rand_sleep(1.1, 1.8)
     Inventory.click_slot(12)
@@ -147,3 +145,4 @@ def start_daily_limit_killob_monitor(run_once: bool = True):
     t = threading.Thread(target=_monitor, daemon=True)
     t.start()
     return stop_event
+

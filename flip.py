@@ -2,7 +2,7 @@ import time
 import queue
 import threading
 import re
-from minescript import EventQueue, EventType, echo, execute
+from system.lib.minescript import EventQueue, EventType, echo, execute
 import utils
 
 # ── CONFIG ─────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ CLAIM_TIMEOUT = 3                           # Sekunden bis Auto-Claim (0 = nur H
 HOTKEY       = 54                           # GLFW code (54 = is 6) https://www.glfw.org/docs/3.3/group__keys.html
 # ───────────────────────────────────────────────────────────────
 
-
+time.sleep(5)
 echo("Flipper started!")
 
 utils.start_daily_limit_killob_monitor()
@@ -57,12 +57,10 @@ with EventQueue() as events:
 
         # waiting for hotkey OR timeout
         start = time.time()
-        while True:
+        while time.time() - start < 10:
             try:
                 event = events.get(timeout=0.1)
                 if event and event.type == EventType.KEY and event.key == HOTKEY:
-                    break
-                if CLAIM_TIMEOUT > 0 and time.time() - start >= CLAIM_TIMEOUT:
                     break
             except queue.Empty:
                 pass
@@ -97,3 +95,4 @@ with EventQueue() as events:
         except Exception as e:
             echo(f"Error when placing new order: {e}")
 echo("Script exited.")
+
