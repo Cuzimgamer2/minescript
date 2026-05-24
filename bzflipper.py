@@ -34,8 +34,10 @@ ITEM_NAME      = "enchanted potato"
 ITEM_ID        = "minecraft:baked_potato"
 CUSTOM_AMOUNT  = "5k"
 
-CLAIM_TIMEOUT  = 3
-HOTKEY         = 54  # GLFW key code for key 6
+CLAIM_TIMEOUT        = 3   # secs
+ORDER_TIMEOUT        = 120 # secs
+MAX_CONCURRENT_ORDERS = 5
+HOTKEY               = 54  # GLFW key code for key 6
 
 # ──────────────────────────────────────────────────────────────
 # UTILITIES
@@ -255,101 +257,153 @@ def main():
     # Start safety monitor
     start_daily_limit_killjob_monitor()
 
+    concurrent_orders = 0
+    last_order_time = 0
+
     # Initial order
     try:
         place_order(ITEM_NAME)
+        concurrent_orders += 1
+        last_order_time = time.time()
+
+        echo(f"Initial order placed | Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}")
+
     except Exception as e:
         echo(f"Error placing initial order: {e}")
-    else:
-        echo("Initial order placed.")
 
     with EventQueue() as events:
         events.register_chat_listener()
         events.register_key_listener()
 
         while True:
-            echo("Waiting for order fill...")
+            current_time = time.time()
 
-            order_filled = False
+            # Timeout-based new order placement
+            if (
+                concurrent_orders < MAX_CONCURRENT_ORDERS
+                and current_time - last_order_time >= ORDER_TIMEOUT
+            ):
+                echo(
+                    f"Order timeout reached ({ORDER_TIMEOUT}s). "
+                    f"Placing another order..."
+                )
 
-            # Wait until order fills
-            while not order_filled:
-                event = events.get()
-
-                if event is None:
-                    continue
-
-                if event.type == EventType.CHAT:
-                    if "Buy Order" in event.message and "was filled" in event.message:
-                        order_filled = True
-
-            # Notification
-            try:
-                from minescript_plus import Gui
-
-                Gui.set_title("§aOrder Filled!")
-                Gui.set_subtitle(f"§ePress HOTKEY or wait {CLAIM_TIMEOUT}s")
-                Gui.set_title_times(5, 80, 20)
-
-            except Exception:
-                echo("Order Filled! GUI unavailable")
-
-            echo("Order filled — waiting for hotkey or timeout...")
-
-            # Wait for hotkey OR timeout
-            start = time.time()
-
-            while time.time() - start < CLAIM_TIMEOUT:
                 try:
-                    event = events.get(timeout=0.1)
+                    place_order(ITEM_NAME)
 
-                    if (
-                        event
-                        and event.type == EventType.KEY
-                        and event.key == HOTKEY
-                    ):
-                        echo("Hotkey pressed.")
-                        break
+                    concurrent_orders += 1
+                    last_order_time = time.time()
 
-                except queue.Empty:
-                    pass
+                    echo(
+                        f"Timeout order placed | "
+                        f"Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}"
+                    )
 
-            # Clear GUI titles
+                except Exception as e:
+                    echo(f"Failed to place timeout order: {e}")
+
+            # Process events continuously
             try:
-                from minescript_plus import Gui
-                Gui.clear_titles()
-            except Exception:
-                pass
+                event = events.get(timeout=0.25)
+            except queue.Empty:
+                continue
 
-            echo("Claiming order...")
+            if event is None:
+                continue
 
-            # Claim order
-            try:
-                claim_order()
-            except Exception as e:
-                echo(f"Error during claim: {e}")
-            else:
-                echo("Claim successful")
+            # Filled order detection
+            if event.type == EventType.CHAT:
+                if "Buy Order" in event.message and "was filled" in event.message:
 
-            rand_sleep(0.5, 1.0)
+                    concurrent_orders = max(0, concurrent_orders - 1)
 
-            # Sell items
-            try:
-                sell_items(ITEM_ID)
-            except Exception as e:
-                echo(f"Error during sell: {e}")
-            else:
-                echo("Sell successful")
+                    echo(
+                        f"Order filled | "
+                        f"Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}"
+                    )
 
-            rand_sleep(1.5, 2.5)
+                    # Notification
+                    try:
+                        from minescript_plus import Gui
 
-            # Place new order
-            echo("Placing new order...")
+                        Gui.set_title("§aOrder Filled!")
+                        Gui.set_subtitle(
+                            f"§ePress HOTKEY or wait {CLAIM_TIMEOUT}s"
+                        )
+                        Gui.set_title_times(5, 80, 20)
 
-            try:
-                place_order(ITEM_NAME)
-            except Exception as e:
-                echo(f"Error placing new order: {e}")
+                    except Exception:
+                        echo("Order Filled! GUI unavailable")
+
+                    # Wait for hotkey OR timeout
+                    start = time.time()
+
+                    while time.time() - start < CLAIM_TIMEOUT:
+                        try:
+                            key_event = events.get(timeout=0.1)
+
+                            if (
+                                key_event
+                                and key_event.type == EventType.KEY
+                                and key_event.key == HOTKEY
+                            ):
+                                echo("Hotkey pressed.")
+                                break
+
+                        except queue.Empty:
+                            pass
+
+                    # Clear GUI titles
+                    try:
+                        from minescript_plus import Gui
+                        Gui.clear_titles()
+                    except Exception:
+                        pass
+
+                    # Claim order
+                    echo("Claiming order...")
+
+                    try:
+                        claim_order()
+                    except Exception as e:
+                        echo(f"Error during claim: {e}")
+                    else:
+                        echo("Claim successful")
+
+                    rand_sleep(0.5, 1.0)
+
+                    # Sell items
+                    try:
+                        sell_items(ITEM_ID)
+                    except Exception as e:
+                        echo(f"Error during sell: {e}")
+                    else:
+                        echo("Sell successful")
+
+                    rand_sleep(1.5, 2.5)
+
+                    # Place replacement order immediately after fill
+                    if concurrent_orders < MAX_CONCURRENT_ORDERS:
+                        echo("Placing replacement order...")
+
+                        try:
+                            place_order(ITEM_NAME)
+
+                            concurrent_orders += 1
+                            last_order_time = time.time()
+
+                            echo(
+                                f"Replacement order placed | "
+                                f"Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}"
+                            )
+
+                        except Exception as e:
+                            echo(f"Error placing replacement order: {e}")
+                    else:
+                        echo(
+                            "Replacement order skipped: "
+                            "max concurrent orders reached"
+                        )
 
 
 # ──────────────────────────────────────────────────────────────
