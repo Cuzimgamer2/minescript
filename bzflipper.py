@@ -289,18 +289,29 @@ def main():
     concurrent_orders = 0
     last_order_time = 0
 
-    # Initial order
-    try:
-        if place_order(ITEM_NAME, events=None):
-            concurrent_orders += 1
-            last_order_time = time.time()
-
-        echo(f"Initial order placed | Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}")
-
-    except Exception as e:
-        echo(f"Error placing initial order: {e}")
-
+    # Create event queue BEFORE first order
+    # otherwise the first confirmation message gets missed
     with EventQueue() as events:
+        events.register_chat_listener()
+        events.register_key_listener()
+
+        # Initial order
+        try:
+            if place_order(ITEM_NAME, events):
+                concurrent_orders += 1
+                last_order_time = time.time()
+
+                echo(
+                    f"Initial order confirmed | "
+                    f"Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}"
+                )
+            else:
+                echo("Initial order was NOT confirmed.")
+
+        except Exception as e:
+            echo(f"Error placing initial order: {e}")
+
+
         events.register_chat_listener()
         events.register_key_listener()
 
