@@ -34,10 +34,11 @@ ITEM_NAME      = "enchanted potato"
 ITEM_ID        = "minecraft:baked_potato"
 CUSTOM_AMOUNT  = "5k"
 
-CLAIM_TIMEOUT        = 3   # secs
-ORDER_TIMEOUT        = 120 # secs
+CLAIM_TIMEOUT        = 3
+ORDER_TIMEOUT        = 120
 MAX_CONCURRENT_ORDERS = 5
 HOTKEY               = 54  # GLFW key code for key 6
+ORDER_CONFIRM_TIMEOUT = 8
 
 # ──────────────────────────────────────────────────────────────
 # UTILITIES
@@ -78,7 +79,7 @@ def find_and_click(item_id: str) -> bool:
 # ──────────────────────────────────────────────────────────────
 
 
-def place_order(item_name: str):
+def place_order(item_name: str, events: EventQueue = None) -> bool:
     echo(f"Opening Bazaar for: {item_name}")
 
     execute(f"/bz {item_name}")
@@ -123,11 +124,39 @@ def place_order(item_name: str):
 
     # Confirm order
     Inventory.click_slot(13)
-    echo("Confirmed order")
+    echo("Waiting for Bazaar confirmation message...")
+
+    confirmed = False
+
+    # Wait for confirmation chat message
+    if events is not None:
+        start = time.time()
+
+        while time.time() - start < ORDER_CONFIRM_TIMEOUT:
+            try:
+                event = events.get(timeout=0.25)
+            except queue.Empty:
+                continue
+
+            if not event or event.type != EventType.CHAT:
+                continue
+
+            cleaned = re.sub(r'§.', '', (event.message or '')).lower()
+
+            if "buy order setup" in cleaned:
+                confirmed = True
+                break
 
     rand_sleep(0.5, 1.0)
 
     Screen.close_screen()
+
+    if confirmed:
+        echo("Order successfully confirmed by Bazaar chat message.")
+    else:
+        echo("Order confirmation message not detected.")
+
+    return confirmed
 
 
 
@@ -262,9 +291,9 @@ def main():
 
     # Initial order
     try:
-        place_order(ITEM_NAME)
-        concurrent_orders += 1
-        last_order_time = time.time()
+        if place_order(ITEM_NAME, events=None):
+            concurrent_orders += 1
+            last_order_time = time.time()
 
         echo(f"Initial order placed | Active Orders: {concurrent_orders}/{MAX_CONCURRENT_ORDERS}")
 
@@ -289,10 +318,9 @@ def main():
                 )
 
                 try:
-                    place_order(ITEM_NAME)
-
-                    concurrent_orders += 1
-                    last_order_time = time.time()
+                    if place_order(ITEM_NAME, events):
+                        concurrent_orders += 1
+                        last_order_time = time.time()
 
                     echo(
                         f"Timeout order placed | "
@@ -387,10 +415,9 @@ def main():
                         echo("Placing replacement order...")
 
                         try:
-                            place_order(ITEM_NAME)
-
-                            concurrent_orders += 1
-                            last_order_time = time.time()
+                            if place_order(ITEM_NAME, events):
+                                concurrent_orders += 1
+                                last_order_time = time.time()
 
                             echo(
                                 f"Replacement order placed | "
